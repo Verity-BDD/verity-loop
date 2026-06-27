@@ -4,13 +4,13 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/nikchursin/verity-harness/internal/agent"
-	"github.com/nikchursin/verity-harness/internal/config"
-	"github.com/nikchursin/verity-harness/internal/lifecycle"
-	"github.com/nikchursin/verity-harness/internal/logger"
-	"github.com/nikchursin/verity-harness/internal/prompt"
-	"github.com/nikchursin/verity-harness/internal/snapshot"
-	"github.com/nikchursin/verity-harness/internal/testrunner"
+	"github.com/verity-bdd/verity-loop/internal/agent"
+	"github.com/verity-bdd/verity-loop/internal/config"
+	"github.com/verity-bdd/verity-loop/internal/lifecycle"
+	"github.com/verity-bdd/verity-loop/internal/logger"
+	"github.com/verity-bdd/verity-loop/internal/prompt"
+	"github.com/verity-bdd/verity-loop/internal/snapshot"
+	"github.com/verity-bdd/verity-loop/internal/testrunner"
 )
 
 // Run executes the full harness loop and returns exit code (0 = success, 1 = failure).

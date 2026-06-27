@@ -1,4 +1,4 @@
-# verity-harness — Specification v0.4
+# Verity Loop — Specification v0.4
 
 ## Концепция
 
@@ -9,7 +9,7 @@ CLI-инструмент для разработчика. Поднимает с�
 ## Команда запуска
 
 ```
-verity-harness run
+verity-loop run
 ```
 
 Промпт, список сервисов и тестовая команда берутся из `verity.yaml`.

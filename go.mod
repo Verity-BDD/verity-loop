@@ -1,4 +1,4 @@
-module github.com/nikchursin/verity-harness
+module github.com/verity-bdd/verity-loop
 
 go 1.26.4
 

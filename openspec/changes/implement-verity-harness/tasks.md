@@ -2,7 +2,7 @@
 
 - [x] 1.1 Создать Go-модуль (`go mod init`) и структуру директорий
 - [x] 1.2 Добавить зависимости: YAML-парсер (`gopkg.in/yaml.v3`), цветной вывод (`github.com/fatih/color`)
-- [x] 1.3 Настроить основной entrypoint `cmd/verity-harness/main.go` с командой `run`
+- [x] 1.3 Настроить основной entrypoint `cmd/verity-loop/main.go` с командой `run`
 
 ## 2. Конфигурация (`config`)
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nikchursin/verity-harness/internal/prompt"
+	"github.com/verity-bdd/verity-loop/internal/prompt"
 )
 
 func writePromptFile(t *testing.T, content string) string {

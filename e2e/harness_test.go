@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nikchursin/verity-harness/internal/harness"
+	"github.com/verity-bdd/verity-loop/internal/harness"
 )
 
 // setupGitRepo creates a temp dir with a git repo, returns the path.

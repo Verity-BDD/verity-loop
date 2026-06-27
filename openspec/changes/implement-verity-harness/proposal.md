@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- Новый CLI-бинарник `verity-harness` с командой `run`
+- Новый CLI-бинарник `verity-loop` с командой `run`
 - Конфигурация через `verity.yaml`: список сервисов, тестовая команда, агент, промпт-файл
 - Lifecycle управления сервисами: start → liveness poll → restart после каждой итерации → stop при выходе
 - Итеративный цикл: test → build prompt → agent → restart → repeat

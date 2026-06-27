@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nikchursin/verity-harness/internal/snapshot"
+	"github.com/verity-bdd/verity-loop/internal/snapshot"
 )
 
 func initGitRepo(t *testing.T, dir string) {

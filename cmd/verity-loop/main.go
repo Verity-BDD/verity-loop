@@ -7,12 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/nikchursin/verity-harness/internal/harness"
+	"github.com/verity-bdd/verity-loop/internal/harness"
 )
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "run" {
-		fmt.Fprintf(os.Stderr, "Usage: verity-harness run\n\nRuns the harness loop using verity.yaml in the current directory.\n")
+		fmt.Fprintf(os.Stderr, "Usage: verity-loop run\n\nRuns the harness loop using verity.yaml in the current directory.\n")
 		os.Exit(1)
 	}
 

@@ -1,4 +1,4 @@
-# verity-harness
+# Verity Loop
 
 A CLI tool that drives an LLM agent to fix a failing Go acceptance test. It starts your services, runs the test, feeds failures to the agent, and iterates until the test goes green — or gives up after a configurable number of attempts.
 
@@ -15,21 +15,21 @@ The agent is any binary that accepts a prompt as its last positional argument an
 **From source** (requires Go 1.21+):
 
 ```sh
-git clone https://github.com/nikchursin/verity-harness
+git clone https://github.com/verity-bdd/verity-loop
 cd verity-harness
-go install ./cmd/verity-harness
+go install ./cmd/verity-loop
 ```
 
 **Or build a local binary:**
 
 ```sh
-go build -o verity-harness ./cmd/verity-harness
+go build -o verity-loop ./cmd/verity-loop
 ```
 
 ## Usage
 
 ```sh
-verity-harness run
+verity-loop run
 ```
 
 Run this from any directory that contains a `verity.yaml`. The harness reads its config, starts services, and begins the loop.
@@ -75,7 +75,7 @@ The `examples/hello-world/` directory shows a minimal setup: a failing `Greet` f
 
 ```sh
 cd examples/hello-world
-verity-harness run
+verity-loop run
 ```
 
 The agent receives the failing test output, edits `greeter.go`, and the harness re-runs the test until it passes.

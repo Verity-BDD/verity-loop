@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/nikchursin/verity-harness/internal/config"
-	"github.com/nikchursin/verity-harness/internal/logger"
+	"github.com/verity-bdd/verity-loop/internal/config"
+	"github.com/verity-bdd/verity-loop/internal/logger"
 )
 
 // Runner executes the agent subprocess and tracks consecutive timeouts.
