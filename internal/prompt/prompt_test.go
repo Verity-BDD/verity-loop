@@ -77,7 +77,7 @@ func TestBuild_ServicesSection_AllIterations(t *testing.T) {
 	// iteration 2
 	got2, err := prompt.Build(prompt.Params{
 		Iteration:  2,
-		PromptFile: "/unused",
+		PromptFile: pf,
 		TestOutput: "FAIL",
 		Services:   services,
 	})
@@ -90,9 +90,10 @@ func TestBuild_ServicesSection_AllIterations(t *testing.T) {
 }
 
 func TestBuild_Iteration2(t *testing.T) {
+	pf := writePromptFile(t, "Fix the failing test.")
 	got, err := prompt.Build(prompt.Params{
 		Iteration:  2,
-		PromptFile: "/unused",
+		PromptFile: pf,
 		TestOutput: "FAIL: TestBar",
 		Services:   testServices,
 		ServiceDiffs: []snapshot.ServiceDiff{
@@ -102,8 +103,8 @@ func TestBuild_Iteration2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(got, "Fix the failing test") {
-		t.Error("iteration 2+ should not include prompt_file content")
+	if !strings.Contains(got, "Fix the failing test.") {
+		t.Errorf("expected prompt_file content in iteration 2+ prompt")
 	}
 	if !strings.Contains(got, "--- Test output ---") {
 		t.Errorf("expected test output section")
@@ -117,9 +118,10 @@ func TestBuild_Iteration2(t *testing.T) {
 }
 
 func TestBuild_PerServiceDiffs_MultipleServices(t *testing.T) {
+	pf := writePromptFile(t, "Fix it.")
 	got, err := prompt.Build(prompt.Params{
 		Iteration:  2,
-		PromptFile: "/unused",
+		PromptFile: pf,
 		TestOutput: "FAIL",
 		Services: []config.Service{
 			{Name: "svc-a", WorkDir: "/projects/svc-a"},
@@ -142,9 +144,10 @@ func TestBuild_PerServiceDiffs_MultipleServices(t *testing.T) {
 }
 
 func TestBuild_EmptyDiffOmitted(t *testing.T) {
+	pf := writePromptFile(t, "Fix it.")
 	got, err := prompt.Build(prompt.Params{
 		Iteration:    2,
-		PromptFile:   "/unused",
+		PromptFile:   pf,
 		TestOutput:   "FAIL",
 		Services:     testServices,
 		ServiceDiffs: nil,
@@ -158,9 +161,10 @@ func TestBuild_EmptyDiffOmitted(t *testing.T) {
 }
 
 func TestBuild_RollbackPrompt(t *testing.T) {
+	pf := writePromptFile(t, "Fix it.")
 	got, err := prompt.Build(prompt.Params{
 		Iteration:  2,
-		PromptFile: "/unused",
+		PromptFile: pf,
 		TestOutput: "FAIL: TestBar",
 		Services:   testServices,
 		RollbackDiffs: []snapshot.ServiceDiff{

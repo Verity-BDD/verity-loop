@@ -21,29 +21,30 @@ type Params struct {
 
 // Build constructs the prompt string for the given iteration.
 func Build(p Params) (string, error) {
+	content, err := os.ReadFile(p.PromptFile)
+	if err != nil {
+		return "", fmt.Errorf("reading prompt_file: %w", err)
+	}
+	task := strings.TrimRight(string(content), "\n")
 	services := buildServicesSection(p.Services)
 
 	if p.Iteration == 1 {
-		content, err := os.ReadFile(p.PromptFile)
-		if err != nil {
-			return "", fmt.Errorf("reading prompt_file: %w", err)
-		}
 		return fmt.Sprintf("%s\n\n%s\n--- Test output ---\n%s",
-			strings.TrimRight(string(content), "\n"), services, p.TestOutput), nil
+			task, services, p.TestOutput), nil
 	}
 
 	if len(p.RollbackDiffs) > 0 {
 		return fmt.Sprintf(
-			"--- Test output ---\n%s\n\n%s\n--- Previous attempt broke service restart ---\n%s\nTry a different approach that doesn't break service startup.",
-			p.TestOutput, services, buildDiffSection(p.RollbackDiffs),
+			"%s\n\n--- Test output ---\n%s\n\n%s\n--- Previous attempt broke service restart ---\n%s\nTry a different approach that doesn't break service startup.",
+			task, p.TestOutput, services, buildDiffSection(p.RollbackDiffs),
 		), nil
 	}
 
 	diffSection := buildDiffSection(p.ServiceDiffs)
 	if diffSection == "" {
-		return fmt.Sprintf("--- Test output ---\n%s\n\n%s", p.TestOutput, services), nil
+		return fmt.Sprintf("%s\n\n--- Test output ---\n%s\n\n%s", task, p.TestOutput, services), nil
 	}
-	return fmt.Sprintf("--- Test output ---\n%s\n\n%s\n%s", p.TestOutput, services, diffSection), nil
+	return fmt.Sprintf("%s\n\n--- Test output ---\n%s\n\n%s\n%s", task, p.TestOutput, services, diffSection), nil
 }
 
 func buildServicesSection(services []config.Service) string {
