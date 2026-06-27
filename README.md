@@ -2,6 +2,8 @@
 
 A CLI tool that drives an LLM agent to fix a failing Go acceptance test. It starts your services, runs the test, feeds failures to the agent, and iterates until the test goes green — or gives up after a configurable number of attempts.
 
+![Verity Loop](banner.png)
+
 ## How it works
 
 1. **Init** — starts all configured services in order and waits for their liveness endpoints
