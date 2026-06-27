@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      !contains(github.event.workflow_run.head_commit.message, '[skip ci]')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install git-cliff
+        run: |
+          curl -L https://github.com/orhun/git-cliff/releases/download/v2.2.2/git-cliff-2.2.2-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          sudo mv git-cliff-2.2.2/git-cliff /usr/local/bin/
+
+      - name: Calculate next version
+        id: version
+        run: |
+          set -euo pipefail
+
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            NEXT_VERSION="v0.1.0"
+          else
+            COMMITS_SINCE=$(git rev-list --count "$LAST_TAG..HEAD" 2>/dev/null || echo "0")
+            if [ "$COMMITS_SINCE" = "0" ]; then
+              echo "No new commits since $LAST_TAG, skipping release."
+              echo "version=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if git log --format="%s" "$LAST_TAG..HEAD" | grep -q "^feat"; then
+              BUMP="minor"
+            elif git log --format="%s" "$LAST_TAG..HEAD" | grep -q "^fix"; then
+              BUMP="patch"
+            else
+              BUMP="patch"
+            fi
+
+            CURRENT=${LAST_TAG#v}
+            MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT" | cut -d. -f3)
+
+            case "$BUMP" in
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            esac
+
+            NEXT_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update CHANGELOG.md
+        if: steps.version.outputs.version != ''
+        run: |
+          git-cliff --config cliff.toml --output CHANGELOG.md
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add CHANGELOG.md
+          if [ -n "$(git status --porcelain CHANGELOG.md)" ]; then
+            git commit -m "chore(release): update changelog for ${{ steps.version.outputs.version }} [skip ci]"
+            git push origin main
+          fi
+
+      - name: Create and push tag
+        if: steps.version.outputs.version != ''
+        run: |
+          git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
+
+      - name: Generate release notes
+        if: steps.version.outputs.version != ''
+        run: |
+          git-cliff --config cliff-github.toml --latest --tag "${{ steps.version.outputs.version }}" --output release_notes.md
+
+      - uses: actions/setup-go@v5
+        if: steps.version.outputs.version != ''
+        with:
+          go-version-file: go.mod
+
+      - uses: goreleaser/goreleaser-action@v6
+        if: steps.version.outputs.version != ''
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --release-notes=release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
