@@ -6,15 +6,17 @@ A CLI tool that drives an LLM agent to fix a failing Go acceptance test. It star
 
 ## How it works
 
-1. **Init** — starts all configured services in order and waits for their liveness endpoints
-2. **Loop** — runs the test; if it fails, builds a prompt from the test output + git diff and calls the agent; restarts services; repeats
-3. **Teardown** — stops all services in reverse order on success, failure, or interrupt
+1. **Init** — takes a baseline git snapshot of each service's working tree, starts all configured services in order, and waits for their liveness endpoints
+2. **Preliminary check** — runs the test immediately; exits 0 if it already passes
+3. **Loop** — on each iteration: builds a prompt (iteration 1: user prompt + test output; iteration 2+: test output + git diff vs baseline), calls the agent, restarts services, re-runs the test; repeats until green or max iterations exhausted
+4. **Rollback** — if service liveness fails after an agent run, the working tree is restored to its pre-agent state and the next prompt describes what broke
+5. **Teardown** — stops all services in reverse order on success, failure, or interrupt
 
 The agent is any binary that accepts a prompt as its last positional argument and exits when done. Changes land on disk; git operations are up to you.
 
 ## Install
 
-**From source** (requires Go 1.21+):
+**From source** (requires Go 1.22+):
 
 ```sh
 git clone https://github.com/verity-bdd/verity-loop
@@ -31,10 +33,10 @@ go build -o verity-loop ./cmd/verity-loop
 ## Usage
 
 ```sh
-verity-loop run
+verity-loop run [--config <path>]
 ```
 
-Run this from any directory that contains a `verity.yaml`. The harness reads its config, starts services, and begins the loop.
+Run this from any directory that contains a `verity.yaml`. The harness reads its config, starts services, and begins the loop. Pass `--config` to point at a `verity.yaml` in a different location.
 
 ## Configuration (`verity.yaml`)
 
@@ -59,6 +61,7 @@ services:
     start:   "make run"
     stop:    "make stop"
     restart: "make restart"
+    work_dir: "./my-service"    # defaults to the directory of verity.yaml
     env:
       DATABASE_URL: "postgres://localhost/mydb"
     liveness:
@@ -67,7 +70,7 @@ services:
       interval: 1s
 ```
 
-**Services** are started in list order and stopped in reverse. Omit `liveness` to skip health polling for a service.
+**Services** are started in list order and stopped in reverse. Omit `liveness` to skip health polling for a service. The harness takes a git snapshot of each service's `work_dir` at startup and uses it to compute diffs for the agent prompt and to roll back changes when a service fails to restart.
 
 **Agent contract:** the harness calls `<command> <args...> <prompt>` — the prompt string is always the last positional argument.
 
