@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- *(prompt)* Include task prompt in all agent iterations
+
+### 📚 Documentation
+
+- Update README to match current implementation [skip ci]
+- Add go install one-liner to README [skip ci]
+
+## [0.1.0] - 2026-06-27
+
 ### 🚀 Features
 
 - Per-service work_dir and --config flag
