@@ -16,17 +16,17 @@ The agent is any binary that accepts a prompt as its last positional argument an
 
 ## Install
 
-**From source** (requires Go 1.22+):
+**Requires Go 1.22+.**
+
+```sh
+go install github.com/verity-bdd/verity-loop/cmd/verity-loop@latest
+```
+
+**Or build from source:**
 
 ```sh
 git clone https://github.com/verity-bdd/verity-loop
-cd verity-harness
-go install ./cmd/verity-loop
-```
-
-**Or build a local binary:**
-
-```sh
+cd verity-loop
 go build -o verity-loop ./cmd/verity-loop
 ```
 
