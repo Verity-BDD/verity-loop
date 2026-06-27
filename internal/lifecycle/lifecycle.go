@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/verity-bdd/verity-loop/internal/config"
@@ -78,7 +79,9 @@ func (m *Manager) Teardown() {
 			}
 		}
 		if m.running[i] != nil && m.running[i].Process != nil {
-			m.running[i].Process.Kill()
+			// Kill the entire process group so child processes (e.g. sleep spawned by sh -c)
+			// don't linger with open file descriptors after the shell exits.
+			syscall.Kill(-m.running[i].Process.Pid, syscall.SIGKILL)
 		}
 	}
 }
@@ -89,6 +92,7 @@ func (m *Manager) startBackground(svc config.Service) (*exec.Cmd, error) {
 	cmd.Env = buildEnv(svc.Env)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
