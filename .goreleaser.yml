@@ -1,0 +1,36 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: verity-loop
+    main: ./cmd/verity-loop
+    binary: verity-loop
+    goos:
+      - darwin
+    goarch:
+      - arm64
+
+archives:
+  - id: verity-loop
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+changelog:
+  use: conventional-commits
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^chore\(openspec\)'
+      - '^chore\(main\): release'
