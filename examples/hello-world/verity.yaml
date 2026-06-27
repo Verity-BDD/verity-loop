@@ -1,0 +1,19 @@
+agent:
+  command: claude
+  args:
+    - --dangerously-skip-permissions
+    - -p
+  timeout: 5m
+
+test_command: go test ./...
+
+prompt_file: prompt.md
+
+max_iterations: 5
+
+services:
+  - name: dummy
+    start: "true"
+    stop: "true"
+    restart: "true"
+    # no liveness url = skip liveness polling
