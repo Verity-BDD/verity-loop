@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/verity-bdd/verity-loop/internal/config"
 	"github.com/verity-bdd/verity-loop/internal/prompt"
+	"github.com/verity-bdd/verity-loop/internal/snapshot"
 )
 
 func writePromptFile(t *testing.T, content string) string {
@@ -19,12 +21,17 @@ func writePromptFile(t *testing.T, content string) string {
 	return path
 }
 
+var testServices = []config.Service{
+	{Name: "svc-a", WorkDir: "/projects/svc-a"},
+}
+
 func TestBuild_Iteration1(t *testing.T) {
 	pf := writePromptFile(t, "Fix the failing test.")
 	got, err := prompt.Build(prompt.Params{
 		Iteration:  1,
 		PromptFile: pf,
 		TestOutput: "FAIL: TestFoo",
+		Services:   testServices,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -40,13 +47,57 @@ func TestBuild_Iteration1(t *testing.T) {
 	}
 }
 
+func TestBuild_ServicesSection_AllIterations(t *testing.T) {
+	pf := writePromptFile(t, "Fix it.")
+	services := []config.Service{
+		{Name: "svc-a", WorkDir: "/projects/svc-a"},
+		{Name: "svc-b", WorkDir: "/projects/svc-b"},
+	}
+
+	// iteration 1
+	got1, err := prompt.Build(prompt.Params{
+		Iteration:  1,
+		PromptFile: pf,
+		TestOutput: "FAIL",
+		Services:   services,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got1, "--- Services ---") {
+		t.Errorf("iter 1: expected Services section")
+	}
+	if !strings.Contains(got1, "svc-a: /projects/svc-a") {
+		t.Errorf("iter 1: expected svc-a in Services section")
+	}
+	if !strings.Contains(got1, "svc-b: /projects/svc-b") {
+		t.Errorf("iter 1: expected svc-b in Services section")
+	}
+
+	// iteration 2
+	got2, err := prompt.Build(prompt.Params{
+		Iteration:  2,
+		PromptFile: "/unused",
+		TestOutput: "FAIL",
+		Services:   services,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got2, "--- Services ---") {
+		t.Errorf("iter 2: expected Services section")
+	}
+}
+
 func TestBuild_Iteration2(t *testing.T) {
 	got, err := prompt.Build(prompt.Params{
-		Iteration:    2,
-		PromptFile:   "/unused",
-		TestOutput:   "FAIL: TestBar",
-		BaselineDiff: "diff --git a/foo.go\n+added line",
-		MaxDiffLines: 200,
+		Iteration:  2,
+		PromptFile: "/unused",
+		TestOutput: "FAIL: TestBar",
+		Services:   testServices,
+		ServiceDiffs: []snapshot.ServiceDiff{
+			{Name: "svc-a", WorkDir: "/projects/svc-a", Diff: "diff --git a/foo.go\n+added line"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -57,21 +108,64 @@ func TestBuild_Iteration2(t *testing.T) {
 	if !strings.Contains(got, "--- Test output ---") {
 		t.Errorf("expected test output section")
 	}
-	if !strings.Contains(got, "--- Your changes from previous iterations ---") {
-		t.Errorf("expected changes section")
+	if !strings.Contains(got, "--- Your changes in svc-a (/projects/svc-a) ---") {
+		t.Errorf("expected per-service diff label")
 	}
 	if !strings.Contains(got, "+added line") {
 		t.Errorf("expected diff in prompt")
 	}
 }
 
-func TestBuild_RollbackPrompt(t *testing.T) {
+func TestBuild_PerServiceDiffs_MultipleServices(t *testing.T) {
+	got, err := prompt.Build(prompt.Params{
+		Iteration:  2,
+		PromptFile: "/unused",
+		TestOutput: "FAIL",
+		Services: []config.Service{
+			{Name: "svc-a", WorkDir: "/projects/svc-a"},
+			{Name: "svc-b", WorkDir: "/projects/svc-b"},
+		},
+		ServiceDiffs: []snapshot.ServiceDiff{
+			{Name: "svc-a", WorkDir: "/projects/svc-a", Diff: "+line-a"},
+			{Name: "svc-b", WorkDir: "/projects/svc-b", Diff: "+line-b"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "--- Your changes in svc-a (/projects/svc-a) ---") {
+		t.Errorf("expected svc-a diff section")
+	}
+	if !strings.Contains(got, "--- Your changes in svc-b (/projects/svc-b) ---") {
+		t.Errorf("expected svc-b diff section")
+	}
+}
+
+func TestBuild_EmptyDiffOmitted(t *testing.T) {
 	got, err := prompt.Build(prompt.Params{
 		Iteration:    2,
 		PromptFile:   "/unused",
-		TestOutput:   "FAIL: TestBar",
-		RollbackDiff: "diff --git a/server.go\n-removed startup",
-		MaxDiffLines: 200,
+		TestOutput:   "FAIL",
+		Services:     testServices,
+		ServiceDiffs: nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "--- Your changes") {
+		t.Errorf("should not include diff section when no diffs")
+	}
+}
+
+func TestBuild_RollbackPrompt(t *testing.T) {
+	got, err := prompt.Build(prompt.Params{
+		Iteration:  2,
+		PromptFile: "/unused",
+		TestOutput: "FAIL: TestBar",
+		Services:   testServices,
+		RollbackDiffs: []snapshot.ServiceDiff{
+			{Name: "svc-a", WorkDir: "/projects/svc-a", Diff: "diff --git a/server.go\n-removed startup"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,48 +178,5 @@ func TestBuild_RollbackPrompt(t *testing.T) {
 	}
 	if !strings.Contains(got, "-removed startup") {
 		t.Errorf("expected rollback diff in prompt")
-	}
-}
-
-func TestBuild_DiffTruncation(t *testing.T) {
-	// Build a diff with 10 lines
-	lines := make([]string, 10)
-	for i := range lines {
-		lines[i] = "+line"
-	}
-	bigDiff := strings.Join(lines, "\n")
-
-	got, err := prompt.Build(prompt.Params{
-		Iteration:    2,
-		TestOutput:   "fail",
-		BaselineDiff: bigDiff,
-		MaxDiffLines: 3,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(got, "[... diff truncated ...]") {
-		t.Errorf("expected truncation marker when diff exceeds max_diff_lines")
-	}
-	// Should only contain 3 lines of diff content
-	diffSection := strings.Split(got, "--- Your changes from previous iterations ---")[1]
-	diffLines := strings.Split(strings.TrimSpace(diffSection), "\n")
-	if len(diffLines) > 4 { // 3 content lines + truncation marker
-		t.Errorf("expected at most 4 lines in truncated diff, got %d", len(diffLines))
-	}
-}
-
-func TestBuild_NoDiffTruncationWhenUnderLimit(t *testing.T) {
-	got, err := prompt.Build(prompt.Params{
-		Iteration:    2,
-		TestOutput:   "fail",
-		BaselineDiff: "short diff",
-		MaxDiffLines: 200,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(got, "[... diff truncated ...]") {
-		t.Errorf("should not truncate when diff is under limit")
 	}
 }

@@ -2,7 +2,6 @@ package harness
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/verity-bdd/verity-loop/internal/agent"
 	"github.com/verity-bdd/verity-loop/internal/config"
@@ -14,9 +13,9 @@ import (
 )
 
 // Run executes the full harness loop and returns exit code (0 = success, 1 = failure).
-// ctx should be cancelled on SIGINT/SIGTERM by the caller.
-func Run(ctx context.Context, workDir string) int {
-	cfg, err := config.Load(filepath.Join(workDir, "verity.yaml"))
+// configPath must be the absolute path to verity.yaml.
+func Run(ctx context.Context, configPath string) int {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		logger.Error("config: %v", err)
 		return 1
@@ -28,7 +27,7 @@ func Run(ctx context.Context, workDir string) int {
 	}
 
 	// INIT phase
-	baseline, err := snapshot.TakeSnapshot(workDir)
+	baseline, err := snapshot.TakeMulti(cfg.Services)
 	if err != nil {
 		logger.Error("baseline snapshot: %v", err)
 		return 1
@@ -44,7 +43,7 @@ func Run(ctx context.Context, workDir string) int {
 	}
 
 	// Preliminary test — exit early if already passing
-	result := testrunner.Run(workDir, cfg.TestCommand)
+	result := testrunner.Run(cfg.ConfigDir, cfg.TestCommand)
 	logger.Test(result.Passed, "preliminary test: %s", testStatus(result.Passed))
 	if result.Passed {
 		return 0
@@ -52,7 +51,7 @@ func Run(ctx context.Context, workDir string) int {
 
 	testOutput := testrunner.Truncate(result.Output, cfg.Context.MaxTestOutputLines)
 	agentRunner := agent.New(&cfg.Agent)
-	var rollbackDiff string
+	var rollbackDiffs []snapshot.ServiceDiff
 
 	// Main loop
 	for i := 1; i <= cfg.MaxIterations; i++ {
@@ -64,28 +63,28 @@ func Run(ctx context.Context, workDir string) int {
 
 		logger.Init("iteration %d/%d", i, cfg.MaxIterations)
 
-		preSnap, err := snapshot.TakeSnapshot(workDir)
+		preSnap, err := snapshot.TakeMulti(cfg.Services)
 		if err != nil {
 			logger.Error("pre-agent snapshot: %v", err)
 			return 1
 		}
 
-		baselineDiff, _ := snapshot.Diff(workDir, baseline)
+		serviceDiffs := baseline.DiffAll(cfg.Context.MaxDiffLines)
 
 		promptStr, err := prompt.Build(prompt.Params{
-			Iteration:    i,
-			PromptFile:   cfg.PromptFile,
-			TestOutput:   testOutput,
-			BaselineDiff: baselineDiff,
-			RollbackDiff: rollbackDiff,
-			MaxDiffLines: cfg.Context.MaxDiffLines,
+			Iteration:     i,
+			PromptFile:    cfg.PromptFile,
+			TestOutput:    testOutput,
+			Services:      cfg.Services,
+			ServiceDiffs:  serviceDiffs,
+			RollbackDiffs: rollbackDiffs,
 		})
 		if err != nil {
 			logger.Error("building prompt: %v", err)
 			preSnap.Cleanup()
 			return 1
 		}
-		rollbackDiff = ""
+		rollbackDiffs = nil
 
 		// Run agent
 		agentResult := agentRunner.Run(ctx, promptStr)
@@ -101,19 +100,18 @@ func Run(ctx context.Context, workDir string) int {
 		// Restart services and check liveness
 		if ok := mgr.Restart(ctx); !ok {
 			// Liveness failed — capture diff of what agent did, then rollback
-			agentDiff, _ := snapshot.Diff(workDir, preSnap)
+			rollbackDiffs = preSnap.DiffAll(cfg.Context.MaxDiffLines)
 			logger.Init("rolling back — service liveness failed after restart")
-			if err := snapshot.Restore(workDir, preSnap); err != nil {
+			if err := preSnap.RestoreAll(); err != nil {
 				logger.Error("rollback warning: %v", err)
 			}
-			rollbackDiff = agentDiff
 			preSnap.Cleanup()
 			continue
 		}
 		preSnap.Cleanup()
 
 		// Check test result
-		result = testrunner.Run(workDir, cfg.TestCommand)
+		result = testrunner.Run(cfg.ConfigDir, cfg.TestCommand)
 		testOutput = testrunner.Truncate(result.Output, cfg.Context.MaxTestOutputLines)
 		logger.Test(result.Passed, "iteration %d: %s", i, testStatus(result.Passed))
 

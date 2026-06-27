@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -15,6 +16,7 @@ type Config struct {
 	MaxIterations int       `yaml:"max_iterations"`
 	Services      []Service `yaml:"services"`
 	Context       Context   `yaml:"context"`
+	ConfigDir     string    `yaml:"-"`
 }
 
 type Agent struct {
@@ -28,6 +30,7 @@ type Service struct {
 	Start    string            `yaml:"start"`
 	Stop     string            `yaml:"stop"`
 	Restart  string            `yaml:"restart"`
+	WorkDir  string            `yaml:"work_dir"`
 	Env      map[string]string `yaml:"env"`
 	Liveness Liveness          `yaml:"liveness"`
 }
@@ -44,7 +47,11 @@ type Context struct {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving config path: %w", err)
+	}
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", path, err)
 	}
@@ -52,11 +59,26 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("invalid YAML in %s: %w", path, err)
 	}
+	cfg.ConfigDir = filepath.Dir(absPath)
 	applyDefaults(&cfg)
+	resolveRelativePaths(&cfg)
 	if err := validate(&cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func resolveRelativePaths(cfg *Config) {
+	if cfg.PromptFile != "" && !filepath.IsAbs(cfg.PromptFile) {
+		cfg.PromptFile = filepath.Join(cfg.ConfigDir, cfg.PromptFile)
+	}
+	for i := range cfg.Services {
+		if cfg.Services[i].WorkDir == "" {
+			cfg.Services[i].WorkDir = cfg.ConfigDir
+		} else if !filepath.IsAbs(cfg.Services[i].WorkDir) {
+			cfg.Services[i].WorkDir = filepath.Join(cfg.ConfigDir, cfg.Services[i].WorkDir)
+		}
+	}
 }
 
 func applyDefaults(cfg *Config) {

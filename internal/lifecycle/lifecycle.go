@@ -49,7 +49,7 @@ func (m *Manager) Restart(ctx context.Context) bool {
 	for _, svc := range m.services {
 		logger.Restart("restarting %s", svc.Name)
 		if svc.Restart != "" {
-			if err := m.runSync(ctx, svc.Restart, svc.Env); err != nil {
+			if err := m.runSync(ctx, svc.Restart, svc.Env, svc.WorkDir); err != nil {
 				logger.Error("restart command failed for %s: %v", svc.Name, err)
 				return false
 			}
@@ -73,7 +73,7 @@ func (m *Manager) Teardown() {
 		svc := m.services[i]
 		logger.Stop("stopping %s", svc.Name)
 		if svc.Stop != "" {
-			if err := m.runSync(ctx, svc.Stop, svc.Env); err != nil {
+			if err := m.runSync(ctx, svc.Stop, svc.Env, svc.WorkDir); err != nil {
 				logger.Error("stop command failed for %s: %v", svc.Name, err)
 			}
 		}
@@ -85,6 +85,7 @@ func (m *Manager) Teardown() {
 
 func (m *Manager) startBackground(svc config.Service) (*exec.Cmd, error) {
 	cmd := exec.Command("sh", "-c", svc.Start)
+	cmd.Dir = svc.WorkDir
 	cmd.Env = buildEnv(svc.Env)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -94,8 +95,9 @@ func (m *Manager) startBackground(svc config.Service) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-func (m *Manager) runSync(ctx context.Context, command string, env map[string]string) error {
+func (m *Manager) runSync(ctx context.Context, command string, env map[string]string, workDir string) error {
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd.Dir = workDir
 	cmd.Env = buildEnv(env)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

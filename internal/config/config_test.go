@@ -166,6 +166,107 @@ func TestCheckPromptFile_Exists(t *testing.T) {
 	}
 }
 
+func TestLoad_ConfigDir(t *testing.T) {
+	path := writeYAML(t, `
+agent:
+  command: opencode
+test_command: go test ./...
+prompt_file: prompt.md
+services:
+  - name: app
+    start: ./start.sh
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Dir(path)
+	if cfg.ConfigDir != want {
+		t.Errorf("want ConfigDir=%s, got %s", want, cfg.ConfigDir)
+	}
+}
+
+func TestLoad_WorkDir_EmptyDefaultsToConfigDir(t *testing.T) {
+	path := writeYAML(t, `
+agent:
+  command: opencode
+test_command: go test ./...
+prompt_file: prompt.md
+services:
+  - name: app
+    start: ./start.sh
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Dir(path)
+	if cfg.Services[0].WorkDir != want {
+		t.Errorf("want WorkDir=%s, got %s", want, cfg.Services[0].WorkDir)
+	}
+}
+
+func TestLoad_WorkDir_Relative(t *testing.T) {
+	path := writeYAML(t, `
+agent:
+  command: opencode
+test_command: go test ./...
+prompt_file: prompt.md
+services:
+  - name: app
+    start: ./start.sh
+    work_dir: ./subdir
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(filepath.Dir(path), "subdir")
+	if cfg.Services[0].WorkDir != want {
+		t.Errorf("want WorkDir=%s, got %s", want, cfg.Services[0].WorkDir)
+	}
+}
+
+func TestLoad_WorkDir_Absolute(t *testing.T) {
+	path := writeYAML(t, `
+agent:
+  command: opencode
+test_command: go test ./...
+prompt_file: prompt.md
+services:
+  - name: app
+    start: ./start.sh
+    work_dir: /absolute/path
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Services[0].WorkDir != "/absolute/path" {
+		t.Errorf("want WorkDir=/absolute/path, got %s", cfg.Services[0].WorkDir)
+	}
+}
+
+func TestLoad_PromptFile_RelativeResolved(t *testing.T) {
+	path := writeYAML(t, `
+agent:
+  command: opencode
+test_command: go test ./...
+prompt_file: ./PROMPT.md
+services:
+  - name: app
+    start: ./start.sh
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(filepath.Dir(path), "PROMPT.md")
+	if cfg.PromptFile != want {
+		t.Errorf("want PromptFile=%s, got %s", want, cfg.PromptFile)
+	}
+}
+
 func TestLoad_EnvVars(t *testing.T) {
 	path := writeYAML(t, `
 agent:

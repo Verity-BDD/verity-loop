@@ -89,7 +89,7 @@ func TestE2E_TestAlreadyPassing(t *testing.T) {
 
 	writeVerityYAML(t, dir, "true", "", "true", promptFile, ts.URL, 3)
 
-	code := harness.Run(context.Background(), dir)
+	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d", code)
 	}
@@ -129,7 +129,7 @@ services:
 `, agentScript, testCmd, promptFile, ts.URL)
 	writeFile(t, filepath.Join(dir, "verity.yaml"), content)
 
-	code := harness.Run(context.Background(), dir)
+	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
 	if code != 0 {
 		t.Fatalf("want exit 0 (agent fixed test on iteration 2), got %d", code)
 	}
@@ -146,7 +146,7 @@ func TestE2E_ExhaustedIterations(t *testing.T) {
 	// Agent does nothing (true), test always fails (false)
 	writeVerityYAML(t, dir, "true", "", "false", promptFile, ts.URL, 2)
 
-	code := harness.Run(context.Background(), dir)
+	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
 	if code != 1 {
 		t.Fatalf("want exit 1 (exhausted iterations), got %d", code)
 	}
