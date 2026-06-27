@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 
 - *(lifecycle)* Kill entire process group on service teardown
+- *(ci)* Clean up git-cliff dir and write release notes to /tmp
 
 ### 📚 Documentation
 
