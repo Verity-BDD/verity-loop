@@ -42,6 +42,10 @@ func AgentLine(line string) {
 	fmt.Printf("%s %s\n", cyan("[AGENT]>"), line)
 }
 
+func TestLine(line string) {
+	fmt.Printf("[TEST]> %s\n", line)
+}
+
 func Restart(format string, args ...any) {
 	fmt.Printf("%s %s\n", yellow("[RESTART]"), fmt.Sprintf(format, args...))
 }

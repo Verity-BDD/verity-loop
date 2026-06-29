@@ -1,8 +1,12 @@
 package testrunner
 
 import (
+	"bufio"
+	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/verity-bdd/verity-loop/internal/logger"
 )
 
 type Result struct {
@@ -10,14 +14,40 @@ type Result struct {
 	Output string
 }
 
-// Run executes test_command via shell and captures combined stdout+stderr.
+// Run executes test_command via shell, streams output to the logger line by
+// line, and captures combined stdout+stderr for the prompt context.
 func Run(workDir, command string) Result {
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = workDir
-	out, err := cmd.CombinedOutput()
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return Result{Output: err.Error()}
+	}
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		pw.Close()
+		pr.Close()
+		return Result{Output: err.Error()}
+	}
+	pw.Close()
+
+	var buf strings.Builder
+	scanner := bufio.NewScanner(pr)
+	for scanner.Scan() {
+		line := scanner.Text()
+		logger.TestLine(line)
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+	}
+	pr.Close()
+
+	err = cmd.Wait()
 	return Result{
 		Passed: err == nil,
-		Output: string(out),
+		Output: buf.String(),
 	}
 }
 
