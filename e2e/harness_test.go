@@ -3,15 +3,47 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/verity-bdd/verity-loop/internal/harness"
 )
+
+// TestMain allows the test binary to act as a real HTTP server subprocess.
+// When VERITY_TESTSERVER=1, it serves HTTP 200 on VERITY_TESTSERVER_ADDR
+// (after an optional VERITY_TESTSERVER_DELAY). This lets liveness tests use
+// a real process instead of an in-process mock.
+func TestMain(m *testing.M) {
+	if os.Getenv("VERITY_TESTSERVER") == "1" {
+		if d := os.Getenv("VERITY_TESTSERVER_DELAY"); d != "" {
+			dur, _ := time.ParseDuration(d)
+			time.Sleep(dur)
+		}
+		addr := os.Getenv("VERITY_TESTSERVER_ADDR")
+		http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		return
+	}
+	os.Exit(m.Run())
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	return port
+}
 
 // setupGitRepo creates a temp dir with a git repo, returns the path.
 func setupGitRepo(t *testing.T) string {
@@ -149,5 +181,84 @@ func TestE2E_ExhaustedIterations(t *testing.T) {
 	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
 	if code != 1 {
 		t.Fatalf("want exit 1 (exhausted iterations), got %d", code)
+	}
+}
+
+// TestE2E_ServiceLiveness_WaitsForRealService verifies that the harness polls
+// liveness until a real service subprocess becomes ready. The service starts
+// with a 500ms delay to exercise the retry loop.
+func TestE2E_ServiceLiveness_WaitsForRealService(t *testing.T) {
+	dir := setupGitRepo(t)
+
+	testBin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := freePort(t)
+
+	promptFile := filepath.Join(dir, "prompt.md")
+	writeFile(t, promptFile, "fix the test")
+
+	content := fmt.Sprintf(`agent:
+  command: true
+  args: []
+  timeout: 30s
+test_command: true
+prompt_file: %s
+max_iterations: 1
+services:
+  - name: real-server
+    start: "%s"
+    stop: "true"
+    restart: "true"
+    env:
+      VERITY_TESTSERVER: "1"
+      VERITY_TESTSERVER_ADDR: ":%d"
+      VERITY_TESTSERVER_DELAY: "500ms"
+    liveness:
+      url: http://127.0.0.1:%d/
+      interval: 100ms
+      timeout: 5s
+`, promptFile, testBin, port, port)
+	writeFile(t, filepath.Join(dir, "verity.yaml"), content)
+
+	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
+	if code != 0 {
+		t.Fatalf("want exit 0 (harness waited for service liveness), got %d", code)
+	}
+}
+
+// TestE2E_ServiceLiveness_Timeout verifies that the harness exits non-zero when
+// a service never becomes ready within the configured liveness timeout.
+func TestE2E_ServiceLiveness_Timeout(t *testing.T) {
+	dir := setupGitRepo(t)
+	port := freePort(t)
+
+	promptFile := filepath.Join(dir, "prompt.md")
+	writeFile(t, promptFile, "fix the test")
+
+	// Service sleeps forever and never serves HTTP on the liveness port.
+	content := fmt.Sprintf(`agent:
+  command: true
+  args: []
+  timeout: 30s
+test_command: true
+prompt_file: %s
+max_iterations: 1
+services:
+  - name: dead-service
+    start: sleep 300
+    stop: "true"
+    restart: "true"
+    liveness:
+      url: http://127.0.0.1:%d/
+      interval: 100ms
+      timeout: 1s
+`, promptFile, port)
+	writeFile(t, filepath.Join(dir, "verity.yaml"), content)
+
+	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
+	if code != 1 {
+		t.Fatalf("want exit 1 (liveness timeout), got %d", code)
 	}
 }

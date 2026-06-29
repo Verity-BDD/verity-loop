@@ -20,9 +20,10 @@ type Config struct {
 }
 
 type Agent struct {
-	Command string        `yaml:"command"`
-	Args    []string      `yaml:"args"`
-	Timeout time.Duration `yaml:"timeout"`
+	Command           string        `yaml:"command"`
+	Args              []string      `yaml:"args"`
+	Timeout           time.Duration `yaml:"timeout"`
+	InactivityTimeout time.Duration `yaml:"inactivity_timeout"`
 }
 
 type Service struct {
