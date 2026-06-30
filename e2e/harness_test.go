@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -261,4 +262,72 @@ services:
 	if code != 1 {
 		t.Fatalf("want exit 1 (liveness timeout), got %d", code)
 	}
+}
+
+// TestE2E_SessionFolder verifies .verity-sessions/ is created with expected artifacts.
+func TestE2E_SessionFolder(t *testing.T) {
+	dir := setupGitRepo(t)
+	ts := startMockLivenessServer(t)
+
+	magicFile := filepath.Join(dir, "magic")
+	promptFile := filepath.Join(dir, "prompt.md")
+	writeFile(t, promptFile, "make the magic file")
+
+	agentScript := filepath.Join(dir, "mock-agent.sh")
+	writeScript(t, agentScript, fmt.Sprintf("touch %s", magicFile))
+
+	testCmd := fmt.Sprintf("test -f %s", magicFile)
+
+	content := fmt.Sprintf(`agent:
+  command: bash
+  args: [%s]
+  timeout: 30s
+test_command: %s
+prompt_file: %s
+max_iterations: 3
+services:
+  - name: mock-service
+    start: sleep 300
+    stop: "true"
+    restart: "true"
+    liveness:
+      url: %s
+      interval: 100ms
+      timeout: 5s
+`, agentScript, testCmd, promptFile, ts.URL)
+	writeFile(t, filepath.Join(dir, "verity.yaml"), content)
+
+	code := harness.Run(context.Background(), filepath.Join(dir, "verity.yaml"))
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d", code)
+	}
+
+	sessionsDir := filepath.Join(dir, ".verity-sessions")
+	entries, err := os.ReadDir(sessionsDir)
+	if err != nil {
+		t.Fatalf(".verity-sessions not created: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 session dir, got %d", len(entries))
+	}
+	sessDir := filepath.Join(sessionsDir, entries[0].Name())
+
+	for _, want := range []string{
+		"session.md",
+		"session.json",
+		filepath.Join("iteration-01", "prompt.md"),
+		filepath.Join("iteration-01", "agent.log"),
+		filepath.Join("iteration-01", "test.log"),
+		filepath.Join("iteration-01", "result.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(sessDir, want)); err != nil {
+			t.Errorf("missing artifact: %s", want)
+		}
+	}
+
+	data, _ := os.ReadFile(filepath.Join(sessDir, "session.md"))
+	if !strings.Contains(string(data), "PASS") {
+		t.Errorf("session.md missing PASS: %s", data)
+	}
+	t.Logf("Session folder: %s", filepath.Base(sessDir))
 }

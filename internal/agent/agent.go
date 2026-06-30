@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"time"
@@ -30,8 +31,8 @@ type Result struct {
 // Run invokes the agent as: <command> <args...> <prompt>.
 // Streams stdout+stderr to logger line by line. Enforces agent.timeout.
 // If inactivity_timeout is set, also kills the agent if it produces no output
-// for that duration.
-func (r *Runner) Run(ctx context.Context, prompt string) Result {
+// for that duration. If w is non-nil, each output line is also written to w.
+func (r *Runner) Run(ctx context.Context, prompt string, w io.Writer) Result {
 	timeout := r.cfg.Timeout
 	if timeout == 0 {
 		timeout = 10 * time.Minute
@@ -62,7 +63,7 @@ func (r *Runner) Run(ctx context.Context, prompt string) Result {
 	}
 	pw.Close()
 
-	inactivityKilled := r.readOutput(tctx, cancel, pr)
+	inactivityKilled := r.readOutput(tctx, cancel, pr, w)
 	pr.Close()
 
 	cmd.Wait()
@@ -77,15 +78,22 @@ func (r *Runner) Run(ctx context.Context, prompt string) Result {
 	return Result{}
 }
 
-// readOutput streams agent output to the logger. If inactivity_timeout is
-// configured and no output arrives for that duration, it cancels the agent and
-// returns true. Returns false on normal completion.
-func (r *Runner) readOutput(ctx context.Context, cancel context.CancelFunc, pr *os.File) bool {
+// readOutput streams agent output to the logger (and optionally w). If
+// inactivity_timeout is configured and no output arrives for that duration, it
+// cancels the agent and returns true. Returns false on normal completion.
+func (r *Runner) readOutput(ctx context.Context, cancel context.CancelFunc, pr *os.File, w io.Writer) bool {
+	writeLine := func(line string) {
+		logger.AgentLine(line)
+		if w != nil {
+			fmt.Fprintln(w, line)
+		}
+	}
+
 	inactivity := r.cfg.InactivityTimeout
 	if inactivity == 0 {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
-			logger.AgentLine(scanner.Text())
+			writeLine(scanner.Text())
 		}
 		return false
 	}
@@ -108,7 +116,7 @@ func (r *Runner) readOutput(ctx context.Context, cancel context.CancelFunc, pr *
 			if !ok {
 				return false
 			}
-			logger.AgentLine(line)
+			writeLine(line)
 			if !timer.Stop() {
 				select {
 				case <-timer.C:

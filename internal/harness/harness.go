@@ -8,6 +8,7 @@ import (
 	"github.com/verity-bdd/verity-loop/internal/lifecycle"
 	"github.com/verity-bdd/verity-loop/internal/logger"
 	"github.com/verity-bdd/verity-loop/internal/prompt"
+	"github.com/verity-bdd/verity-loop/internal/session"
 	"github.com/verity-bdd/verity-loop/internal/snapshot"
 	"github.com/verity-bdd/verity-loop/internal/testrunner"
 )
@@ -25,6 +26,12 @@ func Run(ctx context.Context, configPath string) int {
 		logger.Error("%v", err)
 		return 1
 	}
+
+	// Session recorder — writes artifacts to .verity-sessions/<timestamp>/
+	sess := session.New(cfg.ConfigDir)
+	outcome := "fail"
+	iterCount := 0
+	defer func() { sess.Finish(outcome, iterCount, cfg.MaxIterations, configPath) }()
 
 	// INIT phase
 	baseline, err := snapshot.TakeMulti(cfg.Services)
@@ -46,6 +53,7 @@ func Run(ctx context.Context, configPath string) int {
 	result := testrunner.Run(cfg.ConfigDir, cfg.TestCommand)
 	logger.Test(result.Passed, "preliminary test: %s", testStatus(result.Passed))
 	if result.Passed {
+		outcome = "pass"
 		return 0
 	}
 
@@ -61,15 +69,19 @@ func Run(ctx context.Context, configPath string) int {
 		default:
 		}
 
+		iterCount = i
+		iter := sess.StartIteration(i)
 		logger.Init("iteration %d/%d", i, cfg.MaxIterations)
 
 		preSnap, err := snapshot.TakeMulti(cfg.Services)
 		if err != nil {
 			logger.Error("pre-agent snapshot: %v", err)
+			iter.Finish("ERROR")
 			return 1
 		}
 
 		serviceDiffs := baseline.DiffAll(cfg.Context.MaxDiffLines)
+		iter.WriteDiffs(serviceDiffs)
 
 		promptStr, err := prompt.Build(prompt.Params{
 			Iteration:     i,
@@ -82,14 +94,20 @@ func Run(ctx context.Context, configPath string) int {
 		if err != nil {
 			logger.Error("building prompt: %v", err)
 			preSnap.Cleanup()
+			iter.Finish("ERROR")
 			return 1
 		}
 		rollbackDiffs = nil
+		iter.WritePrompt(promptStr)
 
-		// Run agent
-		agentResult := agentRunner.Run(ctx, promptStr)
+		// Run agent, tee output to session file
+		agentWriter := iter.AgentWriter()
+		agentResult := agentRunner.Run(ctx, promptStr, agentWriter)
+		agentWriter.Close()
+
 		if agentResult.TimedOut {
 			preSnap.Cleanup()
+			iter.Finish("TIMEOUT")
 			if agentRunner.ConsecutiveTimeouts() >= 3 {
 				logger.Error("agent timed out 3 times in a row")
 				return 1
@@ -101,23 +119,29 @@ func Run(ctx context.Context, configPath string) int {
 		if ok := mgr.Restart(ctx); !ok {
 			// Liveness failed — capture diff of what agent did, then rollback
 			rollbackDiffs = preSnap.DiffAll(cfg.Context.MaxDiffLines)
+			iter.WriteRollbackDiff(rollbackDiffs)
 			logger.Init("rolling back — service liveness failed after restart")
 			if err := preSnap.RestoreAll(); err != nil {
 				logger.Error("rollback warning: %v", err)
 			}
 			preSnap.Cleanup()
+			iter.Finish("ROLLBACK")
 			continue
 		}
 		preSnap.Cleanup()
 
 		// Check test result
 		result = testrunner.Run(cfg.ConfigDir, cfg.TestCommand)
+		iter.WriteTestOutput(result.Output)
 		testOutput = testrunner.Truncate(result.Output, cfg.Context.MaxTestOutputLines)
 		logger.Test(result.Passed, "iteration %d: %s", i, testStatus(result.Passed))
 
 		if result.Passed {
+			iter.Finish("PASS")
+			outcome = "pass"
 			return 0
 		}
+		iter.Finish("FAIL")
 	}
 
 	logger.Error("exhausted %d iterations — test still failing", cfg.MaxIterations)
