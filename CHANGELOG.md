@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+### 🚀 Features
+
+- *(agent)* Add inactivity_timeout to kill hanging agents
+- *(testrunner)* Stream test output to logger in real time
+- *(session)* Persist each run as a folder of human-readable artifacts
+
+## [0.1.1] - 2026-06-27
+
 ### 🐛 Bug Fixes
 
 - *(prompt)* Include task prompt in all agent iterations
